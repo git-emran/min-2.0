@@ -77,6 +77,7 @@ var electronABPElementTypeMap = {
 
 var parser = require('./ext/abp-filter-parser-modified/abp-filter-parser.js')
 var parsedFilterData = {}
+const webContentsDomainCache = new WeakMap()
 
 function initFilterList () {
   // discard old data if the list is being re-initialized
@@ -123,6 +124,32 @@ function requestDomainIsException (domain) {
   return enabledFilteringOptions.exceptionDomains.includes(removeWWW(domain))
 }
 
+function getRequestBaseDomain (details) {
+  if (!details.webContentsId) {
+    return undefined
+  }
+
+  const contents = webContents.fromId(details.webContentsId)
+  if (!contents || contents.isDestroyed()) {
+    return undefined
+  }
+
+  const currentURL = contents.getURL()
+  const cached = webContentsDomainCache.get(contents)
+
+  if (cached && cached.url === currentURL) {
+    return cached.domain
+  }
+
+  const domain = parser.getUrlHost(currentURL)
+  webContentsDomainCache.set(contents, {
+    url: currentURL,
+    domain
+  })
+
+  return domain
+}
+
 function filterPopups (url) {
   if (!/^https?:\/\//i.test(url)) {
     return true
@@ -165,10 +192,7 @@ function handleRequest (details, callback) {
   /* eslint-disable standard/no-callback-literal */
 
   // webContentsId may not exist if this request is a mainFrame or subframe
-  let domain
-  if (details.webContentsId) {
-    domain = parser.getUrlHost(webContents.fromId(details.webContentsId).getURL())
-  }
+  const domain = getRequestBaseDomain(details)
 
   const isExceptionDomain = domain && requestDomainIsException(domain)
 

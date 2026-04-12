@@ -2,6 +2,89 @@
 Wraps APIs that are only available in the main process in IPC messages, so that the BrowserWindow can use them
 */
 
+// Fetch search suggestions in the main process to avoid CORS limitations from
+// `file://`/`min://` origins and to keep renderer logic lightweight.
+const searchSuggestionCache = new Map()
+const maxSearchSuggestionCacheEntries = 150
+
+function setSearchSuggestionCache (key, value) {
+  if (searchSuggestionCache.size >= maxSearchSuggestionCacheEntries) {
+    const firstKey = searchSuggestionCache.keys().next().value
+    if (firstKey) {
+      searchSuggestionCache.delete(firstKey)
+    }
+  }
+  searchSuggestionCache.set(key, { time: Date.now(), value })
+}
+
+ipc.handle('fetchSearchSuggestions', async function (e, args) {
+  try {
+    const engine = args && args.engine
+    let query = args && args.query
+
+    if (typeof query !== 'string') {
+      return []
+    }
+
+    query = query.trim()
+    if (!query) {
+      return []
+    }
+
+    // Prevent abuse via extremely large payloads.
+    if (query.length > 200) {
+      query = query.slice(0, 200)
+    }
+
+    let url
+    if (engine === 'DuckDuckGo') {
+      url = 'https://ac.duckduckgo.com/ac/?q=' + encodeURIComponent(query) + '&type=list&t=min'
+    } else if (engine === 'Google') {
+      url = 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(query)
+    } else {
+      return []
+    }
+
+    const cacheKey = engine + ':' + query.toLowerCase()
+    const cached = searchSuggestionCache.get(cacheKey)
+    if (cached && (Date.now() - cached.time) < 60000) {
+      return cached.value
+    }
+
+    const res = typeof net.fetch === 'function'
+      ? await net.fetch(url, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' })
+      : await fetch(url, { credentials: 'omit', cache: 'no-store', referrerPolicy: 'no-referrer' })
+
+    if (!res || !res.ok) {
+      return []
+    }
+
+    const json = await res.json()
+    let suggestions = []
+
+    if (engine === 'Google') {
+      if (Array.isArray(json) && Array.isArray(json[1])) {
+        suggestions = json[1]
+      }
+    } else {
+      if (Array.isArray(json)) {
+        suggestions = json
+          .map(r => (r && typeof r === 'object') ? (r.phrase || r.text || r.value) : null)
+          .filter(Boolean)
+      }
+    }
+
+    suggestions = suggestions
+      .filter(s => typeof s === 'string')
+      .slice(0, 8)
+
+    setSearchSuggestionCache(cacheKey, suggestions)
+    return suggestions
+  } catch (err) {
+    return []
+  }
+})
+
 ipc.handle('startFileDrag', function (e, path) {
   app.getFileIcon(path, {}).then(function (icon) {
     e.sender.startDrag({

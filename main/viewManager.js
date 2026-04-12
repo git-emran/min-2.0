@@ -5,8 +5,66 @@ var temporaryPopupViews = {} // id: view
 
 // rate limit on "open in app" requests
 var globalLaunchRequests = 0
-const forwardedEventMap = new WeakMap()
+// Prevent overlapping preview captures, which can trigger GPU mailbox errors.
+const previewCaptureInProgress = new Set()
+// Forwarded events are attached to each WebContents at most once.
+// This prevents accidentally accumulating duplicated listeners (which can trigger
+// MaxListenersExceededWarning and real perf/memory issues).
+const forwardedEventHandlerMap = new WeakMap() // WebContents -> Map(eventName -> handler)
 const coreListenersAttachedSet = new WeakSet()
+
+function ensureReasonableMaxListeners (webContents) {
+  if (!webContents || typeof webContents.setMaxListeners !== 'function') {
+    return
+  }
+  // Keep some protection against real leaks, but avoid noisy warnings from legitimate
+  // short-lived listeners in complex webContents setups (tabs, previews, extensions).
+  const currentMax = typeof webContents.getMaxListeners === 'function' ? webContents.getMaxListeners() : 10
+  if (currentMax !== 0 && currentMax < 30) {
+    webContents.setMaxListeners(30)
+  }
+}
+
+function ensureForwardedEventHandlers (webContents, events) {
+  if (!events || events.length === 0) {
+    return
+  }
+
+  ensureReasonableMaxListeners(webContents)
+
+  let handlersForContents = forwardedEventHandlerMap.get(webContents)
+  if (!handlersForContents) {
+    handlersForContents = new Map()
+    forwardedEventHandlerMap.set(webContents, handlersForContents)
+  }
+
+  events.forEach(function (eventName) {
+    if (handlersForContents.has(eventName)) {
+      return
+    }
+
+    const handler = function () {
+      var args = Array.prototype.slice.call(arguments).slice(1)
+      const currentTabId = getTabIDFromWebContents(webContents)
+      const eventTarget = getWindowFromViewContents(webContents) || windows.getCurrent()
+
+      if (!currentTabId || !eventTarget) {
+        // this can happen during shutdown - windows can be destroyed before the corresponding views,
+        // and the view can emit an event during that time
+        return
+      }
+
+      getWindowWebContents(eventTarget).send('view-event', {
+        tabId: currentTabId,
+        event: eventName,
+        args: args
+      })
+    }
+
+    handlersForContents.set(eventName, handler)
+    webContents.on(eventName, handler)
+  })
+}
 
 function getDefaultViewWebPreferences () {
   return (
@@ -58,32 +116,7 @@ function createView (existingViewId, id, webPreferences, boundsString, events) {
     view = new WebContentsView({ webPreferences: viewPrefs })
   }
 
-  const forwardedEvents = forwardedEventMap.get(view.webContents) || new Set()
-  forwardedEventMap.set(view.webContents, forwardedEvents)
-
-  events.forEach(function (event) {
-    if (forwardedEvents.has(event)) {
-      return
-    }
-
-    forwardedEvents.add(event)
-    view.webContents.on(event, function () {
-      var args = Array.prototype.slice.call(arguments).slice(1)
-      const currentTabId = getTabIDFromWebContents(view.webContents)
-      const eventTarget = getWindowFromViewContents(view.webContents) || windows.getCurrent()
-
-      if (!currentTabId || !eventTarget) {
-        //this can happen during shutdown - windows can be destroyed before the corresponding views, and the view can emit an event during that time
-        return
-      }
-
-      getWindowWebContents(eventTarget).send('view-event', {
-        tabId: currentTabId,
-        event: event,
-        args: args
-      })
-    })
-  })
+  ensureForwardedEventHandlers(view.webContents, events)
 
   if (!coreListenersAttachedSet.has(view.webContents)) {
     coreListenersAttachedSet.add(view.webContents)
@@ -506,10 +539,16 @@ ipc.on('getCapture', function (e, data) {
     return
   }
 
-  const currentWindow = getWindowFromViewContents(view.webContents)
-  if (!currentWindow || windows.getState(currentWindow).selectedView !== data.id || view.webContents.isLoadingMainFrame()) {
+  if (previewCaptureInProgress.has(data.id)) {
     return
   }
+
+  const currentWindow = getWindowFromViewContents(view.webContents)
+  if (!currentWindow || windows.getState(currentWindow).selectedView !== data.id || view.webContents.isDestroyed() || view.webContents.isLoadingMainFrame()) {
+    return
+  }
+
+  previewCaptureInProgress.add(data.id)
 
   view.webContents.capturePage().then(function (img) {
     var size = img.getSize()
@@ -519,17 +558,25 @@ ipc.on('getCapture', function (e, data) {
     img = img.resize({ width: data.width, height: data.height })
     e.sender.send('captureData', { id: data.id, url: img.toDataURL() })
   }).catch(function () {})
+    .finally(function () {
+      previewCaptureInProgress.delete(data.id)
+    })
 })
 
 ipc.on('saveViewCapture', function (e, data) {
   var view = viewMap[data.id]
   if (!view) {
     // view could have been destroyed
+    return
+  }
+
+  if (view.webContents.isDestroyed() || view.webContents.isLoadingMainFrame()) {
+    return
   }
 
   view.webContents.capturePage().then(function (image) {
     view.webContents.downloadURL(image.toDataURL())
-  })
+  }).catch(function () {})
 })
 
 global.getView = getView

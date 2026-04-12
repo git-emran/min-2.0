@@ -118,7 +118,10 @@ function onSwipeGestureLowVelocity () {
 }
 
 webviews.bindIPC('wheel-event', function (tabId, e) {
-  e = JSON.parse(e)
+  e = e && e[0]
+  if (!e) {
+    return
+  }
 
   if (e.defaultPrevented) {
     return

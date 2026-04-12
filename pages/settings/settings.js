@@ -406,16 +406,8 @@ usageStatisticsCheckbox.addEventListener('change', function (e) {
 /* default search engine setting */
 
 var searchEngineDropdown = document.getElementById('default-search-engine')
-var searchEngineInput = document.getElementById('custom-search-engine')
-
-searchEngineInput.setAttribute('placeholder', l('customSearchEngineDescription'))
 
 settings.onLoad(function () {
-  if (currentSearchEngine.custom) {
-    searchEngineInput.hidden = false
-    searchEngineInput.value = currentSearchEngine.searchURL
-  }
-
   for (var searchEngine in searchEngines) {
     var item = document.createElement('option')
     item.textContent = searchEngines[searchEngine].name
@@ -426,27 +418,10 @@ settings.onLoad(function () {
 
     searchEngineDropdown.appendChild(item)
   }
-
-  // add custom option
-  item = document.createElement('option')
-  item.textContent = 'custom'
-  if (currentSearchEngine.custom) {
-    item.setAttribute('selected', 'true')
-  }
-  searchEngineDropdown.appendChild(item)
 })
 
 searchEngineDropdown.addEventListener('change', function (e) {
-  if (this.value === 'custom') {
-    searchEngineInput.hidden = false
-  } else {
-    searchEngineInput.hidden = true
-    settings.set('searchEngine', { name: this.value })
-  }
-})
-
-searchEngineInput.addEventListener('input', function (e) {
-  settings.set('searchEngine', { url: this.value })
+  settings.set('searchEngine', { name: this.value })
 })
 
 /* key map settings */

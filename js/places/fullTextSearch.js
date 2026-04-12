@@ -19,6 +19,9 @@ function fullTextQuery (tokens) {
       .equals(prefix)
       .primaryKeys()))
 
+    // membership checks against large primary-key arrays are hot during searching
+    const tokenMatchSets = tokenMatches.map(keys => new Set(keys))
+
     // count of the number of documents containing each token, used for tf-idf calculation
 
     var tokenMatchCounts = {}
@@ -35,7 +38,7 @@ function fullTextQuery (tokens) {
     historyInMemoryCache.forEach(function (item) {
       var matched = true
       for (var i = 0; i < tokens.length; i++) {
-        if (!tokenMatches[i].includes(item.id) && !item.searchTextCache.fullText.includes(tokens[i])) {
+        if (!tokenMatchSets[i].has(item.id) && !item.searchTextCache.fullText.includes(tokens[i])) {
           matched = false
           break
         }

@@ -5,17 +5,23 @@ ipc.on('open-context-menu', function (e, data) {
 
   data.template.forEach(function (section) {
     section.forEach(function (item) {
-      var id = item.click
-      item.click = function () {
-        e.sender.send('context-menu-item-selected', { menuId: data.id, itemId: id })
+      const id = typeof item.click === 'number' ? item.click : null
+      if (id !== null) {
+        item.click = function () {
+          e.sender.send('context-menu-item-selected', { menuId: data.id, itemId: id })
+        }
       }
       if (item.submenu) {
         for (var i = 0; i < item.submenu.length; i++) {
-          (function (id) {
-            item.submenu[i].click = function () {
-              e.sender.send('context-menu-item-selected', { menuId: data.id, itemId: id })
-            }
-          })(item.submenu[i].click)
+          const subItem = item.submenu[i]
+          const subId = typeof subItem.click === 'number' ? subItem.click : null
+          if (subId !== null) {
+            (function (id) {
+              subItem.click = function () {
+                e.sender.send('context-menu-item-selected', { menuId: data.id, itemId: id })
+              }
+            })(subId)
+          }
         }
       }
       menu.append(new MenuItem(item))
@@ -27,5 +33,6 @@ ipc.on('open-context-menu', function (e, data) {
     activeMenus.delete(data.id)
   })
   activeMenus.set(data.id, menu)
-  menu.popup({ x: data.x, y: data.y })
+  const win = windows.windowFromContents(e.sender)?.win || windows.getCurrent()
+  menu.popup({ window: win, x: data.x, y: data.y })
 })

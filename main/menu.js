@@ -120,11 +120,6 @@ function buildAppMenu (options = {}) {
             },
             preferencesAction,
             {
-              label: 'Services',
-              role: 'services',
-              submenu: []
-            },
-            {
               type: 'separator'
             },
             {

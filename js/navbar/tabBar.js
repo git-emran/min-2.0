@@ -323,7 +323,7 @@ webviews.bindEvent('did-start-loading', function (tabId) {
   tabs.update(tabId, { loaded: false })
 })
 
-webviews.bindEvent('did-stop-loading', function (tabId) {
+function finishLoading (tabId) {
   const tab = tabBar.getTab(tabId)
   if (!tab) {
     return
@@ -331,6 +331,18 @@ webviews.bindEvent('did-stop-loading', function (tabId) {
   progressBar.update(tab.tabRefs.progressBar, 'finish')
   tabs.update(tabId, { loaded: true })
   tabBar.updateTab(tabId)
+}
+
+// Use main-frame load completion events rather than did-stop-loading.
+// This avoids attaching extra did-stop-loading listeners in the main process.
+webviews.bindEvent('did-finish-load', function (tabId) {
+  finishLoading(tabId)
+})
+
+webviews.bindEvent('did-fail-load', function (tabId, errorCode, errorDesc, validatedURL, isMainFrame) {
+  if (isMainFrame) {
+    finishLoading(tabId)
+  }
 })
 
 tasks.on('tab-updated', function (id, key) {

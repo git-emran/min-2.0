@@ -25,21 +25,32 @@ wanted to keep it lightweight and not impact browser performace too much.
 
 // "carbon:password"
 
-const getKeyIcon = () => {
-  const keyIcon = '<svg width="22px" height="22px" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" focusable="false" width="1em" height="1em" style="vertical-align: -0.125em;-ms-transform: rotate(360deg); -webkit-transform: rotate(360deg); transform: rotate(360deg);" preserveAspectRatio="xMidYMid meet" viewBox="0 0 32 32"><path d="M21 2a9 9 0 0 0-9 9a8.87 8.87 0 0 0 .39 2.61L2 24v6h6l10.39-10.39A9 9 0 0 0 30 11.74a8.77 8.77 0 0 0-1.65-6A9 9 0 0 0 21 2zm0 16a7 7 0 0 1-2-.3l-1.15-.35l-.85.85l-3.18 3.18L12.41 20L11 21.41l1.38 1.38l-1.59 1.59L9.41 23L8 24.41l1.38 1.38L7.17 28H4v-3.17L13.8 15l.85-.85l-.29-.95a7.14 7.14 0 0 1 3.4-8.44a7 7 0 0 1 10.24 6a6.69 6.69 0 0 1-1.09 4A7 7 0 0 1 21 18z" fill="currentColor"/><circle cx="22" cy="10" r="2" fill="currentColor"/></svg>'
+let keyIcon = null
+function getKeyIcon () {
+  if (keyIcon) {
+    return keyIcon
+  }
 
-  const keyIconPolicy = trustedTypes.createPolicy('minAutofillTrustedKeyIcon', {
-    createHTML: (string) => string
-  })
+  const rawKeyIcon = '<svg width="22px" height="22px" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" aria-hidden="true" focusable="false" width="1em" height="1em" style="vertical-align: -0.125em;-ms-transform: rotate(360deg); -webkit-transform: rotate(360deg); transform: rotate(360deg);" preserveAspectRatio="xMidYMid meet" viewBox="0 0 32 32"><path d="M21 2a9 9 0 0 0-9 9a8.87 8.87 0 0 0 .39 2.61L2 24v6h6l10.39-10.39A9 9 0 0 0 30 11.74a8.77 8.77 0 0 0-1.65-6A9 9 0 0 0 21 2zm0 16a7 7 0 0 1-2-.3l-1.15-.35l-.85.85l-3.18 3.18L12.41 20L11 21.41l1.38 1.38l-1.59 1.59L9.41 23L8 24.41l1.38 1.38L7.17 28H4v-3.17L13.8 15l.85-.85l-.29-.95a7.14 7.14 0 0 1 3.4-8.44a7 7 0 0 1 10.24 6a6.69 6.69 0 0 1-1.09 4A7 7 0 0 1 21 18z" fill="currentColor"/><circle cx="22" cy="10" r="2" fill="currentColor"/></svg>'
 
-  return keyIconPolicy.createHTML(keyIcon)
+  try {
+    const keyIconPolicy = trustedTypes.createPolicy('minAutofillTrustedKeyIcon', {
+      createHTML: (string) => string
+    })
+    keyIcon = keyIconPolicy.createHTML(rawKeyIcon)
+  } catch (e) {
+    // Trusted Types might not be available/enforced in all contexts.
+    keyIcon = rawKeyIcon
+  }
+
+  return keyIcon
 }
-
-const keyIcon = getKeyIcon()
 
 // Ref to added unlock button.
 var currentUnlockButton = null
 var currentAutocompleteList = null
+let passwordCaptureHooksInitialized = false
+let passwordAutofillCheckSent = false
 
 // Creates an unlock button element.
 //
@@ -69,7 +80,7 @@ function createUnlockButton (input) {
   button.style.opacity = 0.7
   button.style.color = window.getComputedStyle(input).color
   button.style.transition = '0.1s color'
-  button.innerHTML = keyIcon
+  button.innerHTML = getKeyIcon()
 
   // Button hover.
   button.addEventListener('mouseenter', (event) => {
@@ -321,11 +332,14 @@ ipc.on('password-autofill-match', (event, data) => {
 
 // Trigger autofill check from keyboard shortcut.
 ipc.on('password-autofill-shortcut', (event) => {
+  // user initiated, so initialize hooks even if the form loads dynamically
+  initializePasswordCaptureHooks()
   requestAutofill()
 })
 
 // Autofill enabled event handler. Initializes focus listeners for input fields.
 ipc.on('password-autofill-enabled', (event) => {
+  initializePasswordCaptureHooks()
   checkInitialFocus()
 
   // Add default focus event listeners.
@@ -333,10 +347,67 @@ ipc.on('password-autofill-enabled', (event) => {
   window.addEventListener('focus', handleFocus, true)
 })
 
-// Check if password autofill is configured.
-window.addEventListener('load', function (event) {
+function initializePasswordCaptureHooks () {
+  if (passwordCaptureHooksInitialized) {
+    return
+  }
+  passwordCaptureHooksInitialized = true
+
+  // send passwords back to the main process so they can be saved to storage
+  window.addEventListener('submit', handleFormSubmit)
+
+  // watch for clicks on button[type=submit]
+  window.addEventListener('click', function (e) {
+    const path = (e.path) || (e.composed && e.composedPath())
+    if (!path) {
+      return
+    }
+    path.forEach(function (el) {
+      if (el.tagName === 'BUTTON' && el.getAttribute('type') === 'submit' && !el.disabled) {
+        handleFormSubmit()
+      }
+    })
+  }, true)
+
+  electron.webFrame.executeJavaScript(`
+  var origSubmit = HTMLFormElement.prototype.submit;
+  HTMLFormElement.prototype.submit = function () {
+    window.postMessage({message: 'formSubmit'})
+    origSubmit.apply(this, arguments)
+  }
+  `)
+
+  window.addEventListener('message', function (e) {
+    if (e.data && e.data.message && e.data.message === 'formSubmit') {
+      handleFormSubmit()
+    }
+  })
+}
+
+function maybeEnablePasswordFeatures () {
+  if (passwordAutofillCheckSent) {
+    return
+  }
+
+  // Avoid adding any password-related overhead on pages that don't have password fields.
+  if (!document.querySelector('input[type="password"]')) {
+    return
+  }
+
+  passwordAutofillCheckSent = true
   ipc.send('password-autofill-check')
+}
+
+window.addEventListener('load', function () {
+  maybeEnablePasswordFeatures()
 })
+
+// login forms are often injected after load; initialize only when the user interacts with one
+window.addEventListener('focusin', function (e) {
+  if (e.target && e.target.matches && e.target.matches('input[type="password"]')) {
+    maybeEnablePasswordFeatures()
+  }
+}, true)
 
 // send passwords back to the main process so they can be saved to storage
 function handleFormSubmit () {
@@ -347,35 +418,6 @@ function handleFormSubmit () {
     ipc.send('password-form-filled', [window.location.hostname, usernameValue, passwordValue])
   }
 }
-
-window.addEventListener('submit', handleFormSubmit)
-
-// watch for clicks on button[type=submit]
-window.addEventListener('click', function (e) {
-  const path = (e.path) || (e.composed && e.composedPath())
-  if (!path) {
-    return
-  }
-  path.forEach(function (el) {
-    if (el.tagName === 'BUTTON' && el.getAttribute('type') === 'submit' && !el.disabled) {
-      handleFormSubmit()
-    }
-  })
-}, true)
-
-electron.webFrame.executeJavaScript(`
-var origSubmit = HTMLFormElement.prototype.submit;
-HTMLFormElement.prototype.submit = function () {
-  window.postMessage({message: 'formSubmit'})
-  origSubmit.apply(this, arguments)
-}
-`)
-
-window.addEventListener('message', function (e) {
-  if (e.data && e.data.message && e.data.message === 'formSubmit') {
-    handleFormSubmit()
-  }
-})
 
 const passwordGenerationCharset = 'bcdfghjklmnpqrstvwxyzBCDFGHJKLMNPQRSTVWXYZ0123456789-_!'
 

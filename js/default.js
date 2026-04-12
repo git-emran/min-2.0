@@ -1,29 +1,17 @@
-window.globalArgs = {}
+window.globalArgs = window.globalArgs || {}
+window.windowId = window.windowId || window.globalArgs['window-id']
+window.electron = window.electron || require('electron')
+window.fs = window.fs || require('fs')
+window.EventEmitter = window.EventEmitter || require('events')
+window.ipc = window.ipc || window.electron.ipcRenderer
+window.platformType = window.platformType || 'linux'
 
-process.argv.forEach(function (arg) {
-  if (arg.startsWith('--')) {
-    var key = arg.split('=')[0].replace('--', '')
-    var value = arg.split('=')[1]
-    globalArgs[key] = value
-  }
-})
-
-window.windowId = globalArgs['window-id']
-
-window.electron = require('electron')
-window.fs = require('fs')
-window.EventEmitter = require('events')
-window.ipc = electron.ipcRenderer
-
-if (navigator.platform === 'MacIntel') {
+if (window.platformType === 'mac') {
   document.body.classList.add('mac')
-  window.platformType = 'mac'
-} else if (navigator.platform === 'Win32') {
+} else if (window.platformType === 'windows') {
   document.body.classList.add('windows')
-  window.platformType = 'windows'
 } else {
   document.body.classList.add('linux')
-  window.platformType = 'linux'
 }
 
 if (navigator.maxTouchPoints > 0) {

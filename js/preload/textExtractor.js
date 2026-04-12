@@ -1,18 +1,24 @@
 /* send bookmarks data.  */
 
-function isVisible (el) {
-  // https://github.com/jquery/jquery/blob/305f193aa57014dc7d8fa0739a3fefd47166cd44/src/css/hiddenVisibleSelectors.js
-  return el.offsetWidth || el.offsetHeight || (el.getClientRects && el.getClientRects().length)
-}
+// Running a full DOM traversal on every navigation can be expensive, especially on SPAs
+// that call history.pushState frequently. Keep extraction rate-limited and avoid forced
+// layouts (offsetWidth/getClientRects) during traversal.
+const maxExtractedTextLength = 200000
+const minTimeBetweenExtractions = 5000
+
+let lastExtractionTime = 0
+let extractionTimeout = null
 
 function extractPageText (doc, win) {
-  var maybeNodes = [].slice.call(doc.body.childNodes)
-  var textNodes = []
+  // Use a stack (LIFO) instead of shift/unshift to avoid O(n^2) array churn on large DOMs.
+  var stack = [].slice.call(doc.body.childNodes)
+  var textParts = []
+  var collectedChars = 0
 
-  var ignore = 'link, style, script, noscript, .hidden, .visually-hidden, .visuallyhidden, [role=presentation], [hidden], [style*="display:none"], [style*="display: none"], .ad, .dialog, .modal, select, svg, details:not([open]), header, nav, footer'
+  var ignore = 'link, style, script, noscript, .hidden, .visually-hidden, .visuallyhidden, [role=presentation], [hidden], [aria-hidden="true"], [style*="display:none"], [style*="display: none"], [style*="visibility:hidden"], [style*="visibility: hidden"], .ad, .dialog, .modal, select, svg, details:not([open]), header, nav, footer'
 
-  while (maybeNodes.length) {
-    var node = maybeNodes.shift()
+  while (stack.length) {
+    var node = stack.pop()
 
     // if the node should be ignored, skip it and all of it's child nodes
     if (node.matches && node.matches(ignore)) {
@@ -22,11 +28,14 @@ function extractPageText (doc, win) {
     // if the node is a text node, add it to the list of text nodes
 
     if (node.nodeType === 3) {
-      textNodes.push(node)
-      continue
-    }
-
-    if (!isVisible(node)) {
+      var content = node.textContent
+      if (content) {
+        textParts.push(content)
+        collectedChars += content.length + 1
+        if (collectedChars >= maxExtractedTextLength) {
+          break
+        }
+      }
       continue
     }
 
@@ -36,18 +45,11 @@ function extractPageText (doc, win) {
 
     for (var i = cnl - 1; i >= 0; i--) {
       var childNode = childNodes[i]
-      maybeNodes.unshift(childNode)
+      stack.push(childNode)
     }
   }
 
-  var text = ''
-
-  var tnl = textNodes.length
-
-  // combine the text of all of the accepted text nodes together
-  for (var i = 0; i < tnl; i++) {
-    text += textNodes[i].textContent + ' '
-  }
+  var text = textParts.join(' ')
 
   // special meta tags
 
@@ -66,6 +68,7 @@ function extractPageText (doc, win) {
 }
 
 function getPageData (cb) {
+  // requestAnimationFrame helps ensure we don't compete with input/paint work.
   requestAnimationFrame(function () {
     var text = extractPageText(document, window)
 
@@ -81,7 +84,7 @@ function getPageData (cb) {
 
     // limit the amount of text that is collected
 
-    text = text.substring(0, 300000)
+    text = text.substring(0, maxExtractedTextLength)
 
     cb({
       extractedText: text
@@ -89,14 +92,35 @@ function getPageData (cb) {
   })
 }
 
-// send the data when the page loads
-if (process.isMainFrame) {
-  window.addEventListener('load', function (e) {
-    setTimeout(function () {
+function schedulePageDataSend () {
+  // Debounce + rate-limit extraction to avoid repeated work on SPAs.
+  const now = Date.now()
+  const msSinceLast = now - lastExtractionTime
+  const wait = Math.max(500, minTimeBetweenExtractions - msSinceLast)
+
+  clearTimeout(extractionTimeout)
+  extractionTimeout = setTimeout(function () {
+    extractionTimeout = null
+    lastExtractionTime = Date.now()
+
+    const run = function () {
       getPageData(function (data) {
         ipc.send('pageData', data)
       })
-    }, 500)
+    }
+
+    if (typeof requestIdleCallback === 'function') {
+      requestIdleCallback(run, { timeout: 2500 })
+    } else {
+      setTimeout(run, 0)
+    }
+  }, wait)
+}
+
+// send the data when the page loads
+if (process.isMainFrame) {
+  window.addEventListener('load', function (e) {
+    schedulePageDataSend()
   })
 
   setTimeout(function () {
@@ -117,12 +141,8 @@ if (process.isMainFrame) {
   }, 0)
 
   window.addEventListener('message', function (e) {
-    if (e.data === '_minInternalLocationChange') {
-      setTimeout(function () {
-        getPageData(function (data) {
-          ipc.send('pageData', data)
-        })
-      }, 500)
+    if (e.data === '_minInternalLocationChange' || e.data === '_minInternalLocationReplacement') {
+      schedulePageDataSend()
     }
   })
 }

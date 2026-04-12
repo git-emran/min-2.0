@@ -2,6 +2,7 @@ const path = require('path')
 const fs = require('fs')
 
 const outFile = path.resolve(__dirname, '../dist/preload.js')
+const mainWindowOutFile = path.resolve(__dirname, '../dist/mainWindowPreload.js')
 
 const modules = [
   'js/preload/default.js',
@@ -13,6 +14,10 @@ const modules = [
   'js/preload/translate.js',
 ]
 
+const mainWindowModules = [
+  'js/preload/mainWindow.js'
+]
+
 function buildPreload() {
   /* concatenate modules */
   let output = ''
@@ -21,6 +26,13 @@ function buildPreload() {
   })
 
   fs.writeFileSync(outFile, output, 'utf-8')
+
+  let mainWindowOutput = ''
+  mainWindowModules.forEach(function (script) {
+    mainWindowOutput += fs.readFileSync(path.resolve(__dirname, '../', script)) + ';\n'
+  })
+
+  fs.writeFileSync(mainWindowOutFile, mainWindowOutput, 'utf-8')
 }
 
 if (module.parent) {

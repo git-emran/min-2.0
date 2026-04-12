@@ -11,14 +11,43 @@ function cloneEvent (e) {
   for (var i = 0; i < propertiesToClone.length; i++) {
     obj[propertiesToClone[i]] = e[propertiesToClone[i]]
   }
-  return JSON.stringify(obj)
+  return obj
 }
 
 // workaround for Electron bug
 setTimeout(function () {
   /* Used for swipe gestures */
+  var pendingWheelEvent = null
+  var wheelFlushScheduled = false
+
+  function flushWheelEvent () {
+    wheelFlushScheduled = false
+    if (!pendingWheelEvent) {
+      return
+    }
+    ipc.send('wheel-event', pendingWheelEvent)
+    pendingWheelEvent = null
+  }
+
   window.addEventListener('wheel', function (e) {
-    ipc.send('wheel-event', cloneEvent(e))
+    // Coalesce wheel events to at most one IPC message per frame.
+    // This reduces IPC overhead during high-frequency scrolls.
+    if (pendingWheelEvent) {
+      pendingWheelEvent.deltaX += e.deltaX
+      pendingWheelEvent.deltaY += e.deltaY
+      pendingWheelEvent.metaKey = pendingWheelEvent.metaKey || e.metaKey
+      pendingWheelEvent.ctrlKey = pendingWheelEvent.ctrlKey || e.ctrlKey
+      pendingWheelEvent.defaultPrevented = pendingWheelEvent.defaultPrevented || e.defaultPrevented
+      pendingWheelEvent.clientX = e.clientX
+      pendingWheelEvent.clientY = e.clientY
+    } else {
+      pendingWheelEvent = cloneEvent(e)
+    }
+
+    if (!wheelFlushScheduled) {
+      wheelFlushScheduled = true
+      requestAnimationFrame(flushWheelEvent)
+    }
   })
 
   var scrollTimeout = null

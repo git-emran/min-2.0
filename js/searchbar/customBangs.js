@@ -2,7 +2,7 @@
 
 const { ipcRenderer } = require('electron')
 const fs = require('fs')
-const quickScore = require('quick-score').quickScore
+const quickScore = require('util/quickScore.js').quickScore
 
 const bangsPlugin = require('searchbar/bangsPlugin.js')
 

@@ -219,6 +219,11 @@ function createWindowWithBounds (bounds, customArgs) {
       nodeIntegration: true,
       contextIsolation: false,
       nodeIntegrationInWorker: true, // used by ProcessSpawner
+      preload: __dirname + '/dist/mainWindowPreload.js',
+      webSecurity: true,
+      allowRunningInsecureContent: false,
+      safeDialogs: true,
+      safeDialogsMessage: 'Prevent this page from creating additional dialogs',
       additionalArguments: [
         '--user-data-path=' + userDataPath,
         '--app-version=' + app.getVersion(),
@@ -231,6 +236,17 @@ function createWindowWithBounds (bounds, customArgs) {
       ]
     }
   })
+
+  // Avoid noisy MaxListenersExceededWarning for legitimate short-lived listeners
+  // attached across the app lifecycle (especially on macOS, where the warning is
+  // frequently surfaced to users). Keep a finite limit to retain some leak signal.
+  if (typeof mainView.webContents?.setMaxListeners === 'function') {
+    const currentMax = typeof mainView.webContents.getMaxListeners === 'function' ? mainView.webContents.getMaxListeners() : 10
+    if (currentMax !== 0 && currentMax < 30) {
+      mainView.webContents.setMaxListeners(30)
+    }
+  }
+
   mainView.webContents.loadURL(browserPage)
 
   if (bounds.maximized) {
@@ -346,6 +362,11 @@ function createWindowWithBounds (bounds, customArgs) {
     }
   })
 
+  // the privileged browser UI should never spawn additional renderer windows
+  mainView.webContents.setWindowOpenHandler(function () {
+    return { action: 'deny' }
+  })
+
   mainView.webContents.on('before-input-event', function(e, input) {
     sendIPCToWindow(newWin, 'before-input-event', input)
   })
@@ -443,7 +464,9 @@ ipc.on('showSecondaryMenu', function (event, data) {
   if (!secondaryMenu) {
     secondaryMenu = buildAppMenu({ secondary: true })
   }
+  const win = windows.windowFromContents(event.sender)?.win || windows.getCurrent()
   secondaryMenu.popup({
+    window: win,
     x: data.x,
     y: data.y
   })
@@ -490,7 +513,8 @@ ipc.on('request-tab-state', function(e) {
 
 /* places service */
 
-const placesPage = 'file://' + __dirname + '/js/places/placesService.html'
+// Use the internal protocol so this (node-enabled) renderer still gets CSP + security headers.
+const placesPage = 'min://app/js/places/placesService.html'
 
 let placesWindow = null
 app.once('ready', function() {

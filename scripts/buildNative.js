@@ -17,6 +17,10 @@ const targets = [
   {
     sourceFile: path.join(nativeDir, 'tag_ranker.cc'),
     outFile: path.join(buildDir, 'tag_ranker.node')
+  },
+  {
+    sourceFile: path.join(nativeDir, 'quick_score.cc'),
+    outFile: path.join(buildDir, 'quick_score.node')
   }
 ]
 

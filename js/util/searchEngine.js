@@ -8,7 +8,7 @@ var currentSearchEngine = {
   searchURL: '%s'
 }
 
-var defaultSearchEngine = 'DuckDuckGo'
+var defaultSearchEngine = 'Google'
 
 var searchEngines = {
   DuckDuckGo: {
@@ -20,65 +20,9 @@ var searchEngines = {
   Google: {
     name: 'Google',
     searchURL: 'https://www.google.com/search?q=%s',
+    // OpenSearch-compatible JSON format: [query, [suggestions...], ...]
+    suggestionsURL: 'https://suggestqueries.google.com/complete/search?client=firefox&q=%s',
     queryParam: 'q'
-  },
-  Bing: {
-    name: 'Bing',
-    searchURL: 'https://www.bing.com/search?q=%s',
-    suggestionsURL: 'https://www.bing.com/osjson.aspx?query=%s',
-    queryParam: 'q'
-  },
-  Yahoo: {
-    name: 'Yahoo',
-    searchURL: 'https://search.yahoo.com/yhs/search?p=%s',
-    suggestionsURL: 'https://search.yahoo.com/sugg/os?command=%s&output=fxjson',
-    queryParam: 'p'
-  },
-  Baidu: {
-    name: 'Baidu',
-    searchURL: 'https://www.baidu.com/s?wd=%s',
-    suggestionsURL: 'https://www.baidu.com/su?wd=%s&action=opensearch&ie=utf-8',
-    queryParam: 'wd'
-  },
-  StartPage: {
-    name: 'StartPage',
-    searchURL: 'https://www.startpage.com/do/search?q=%s',
-    suggestionsURL: 'https://www.startpage.com/cgi-bin/csuggest?query=%s&format=json',
-    queryParam: 'q'
-  },
-  Ecosia: {
-    name: 'Ecosia',
-    searchURL: 'https://www.ecosia.org/search?q=%s',
-    suggestionsURL: 'https://ac.ecosia.org/autocomplete?q=%s&type=list',
-    queryParam: 'q'
-  },
-  Qwant: {
-    name: 'Qwant',
-    searchURL: 'https://www.qwant.com/?q=%s',
-    suggestionsURL: 'https://api.qwant.com/api/suggest/?q=%s&client=opensearch',
-    queryParam: 'q'
-  },
-  Wikipedia: {
-    name: 'Wikipedia',
-    searchURL: 'https://wikipedia.org/w/index.php?search=%s',
-    suggestionsURL: 'https://wikipedia.org/w/api.php?action=opensearch&search=%s',
-    queryParam: 'search'
-  },
-  Yandex: {
-    name: 'Yandex',
-    searchURL: 'https://yandex.com/search/?text=%s',
-    suggestionsURL: 'https://suggest.yandex.com/suggest-ff.cgi?part=%s',
-    queryParam: 'text'
-  },
-  Brave: {
-    name: 'Brave',
-    searchURL: 'https://search.brave.com/search?q=%s',
-    suggestionsURL: 'https://search.brave.com/api/suggest?q=%s',
-    queryParam: 'q'
-  },
-  none: {
-    name: 'none',
-    searchURL: 'http://%s'
   }
 }
 
@@ -89,21 +33,25 @@ for (const e in searchEngines) {
 }
 
 settings.listen('searchEngine', function (value) {
-  if (value && value.name) {
-    currentSearchEngine = searchEngines[value.name]
-  } else if (value && value.url) {
-    var searchDomain
-    try {
-      searchDomain = new URL(value.url).hostname.replace('www.', '')
-    } catch (e) {}
-    currentSearchEngine = {
-      name: searchDomain || 'custom',
-      searchURL: value.url,
-      custom: true
-    }
-  } else {
-    currentSearchEngine = searchEngines[defaultSearchEngine]
+  let nextEngine = null
+
+  if (value && value.name && searchEngines[value.name]) {
+    nextEngine = searchEngines[value.name]
   }
+
+  // Custom/unknown engines are no longer supported; fall back to default.
+  if (!nextEngine) {
+    nextEngine = searchEngines[defaultSearchEngine]
+
+    try {
+      if (value && (value.url || (value.name && !searchEngines[value.name]))) {
+        // Persist migration so the settings UI stays consistent.
+        settings.set('searchEngine', { name: defaultSearchEngine })
+      }
+    } catch (e) {}
+  }
+
+  currentSearchEngine = nextEngine
 })
 
 var searchEngine = {

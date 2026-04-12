@@ -119,6 +119,7 @@ const webviews = {
   placeholderRequests: [],
   captureTimeouts: {},
   asyncCallbacks: {},
+  nextAsyncCallId: 1,
   internalPages: {
     error: 'min://app/pages/error/index.html'
   },
@@ -291,6 +292,21 @@ const webviews = {
     clearTimeout(webviews.captureTimeouts[id])
     delete webviews.captureTimeouts[id]
 
+    // Clean up any pending async callbacks for this view so they don't
+    // accumulate if the view is destroyed before the response arrives.
+    Object.keys(webviews.asyncCallbacks).forEach(function (callId) {
+      const record = webviews.asyncCallbacks[callId]
+      if (record && record.tabId === id) {
+        clearTimeout(record.timeoutId)
+        delete webviews.asyncCallbacks[callId]
+        try {
+          record.cb(new Error('view destroyed'))
+        } catch (e) {
+          console.warn(e)
+        }
+      }
+    })
+
     if (webviews.hasViewForTab(id)) {
       tasks.getTaskContainingTab(id).tabs.update(id, {
         hasWebContents: false
@@ -403,8 +419,24 @@ const webviews = {
       args = [args]
     }
     if (cb) {
-      var callId = Math.random()
-      webviews.asyncCallbacks[callId] = cb
+      // Use a monotonic integer id (always truthy) so the main process always
+      // returns a result, and ensure callbacks can't leak indefinitely.
+      var callId = webviews.nextAsyncCallId++
+      const timeoutMs = 120000
+      const timeoutId = setTimeout(function () {
+        const record = webviews.asyncCallbacks[callId]
+        if (!record) {
+          return
+        }
+        delete webviews.asyncCallbacks[callId]
+        try {
+          record.cb(new Error('callAsync timeout: ' + method))
+        } catch (e) {
+          console.warn(e)
+        }
+      }, timeoutMs)
+
+      webviews.asyncCallbacks[callId] = { cb, tabId: id, timeoutId }
     }
     ipc.send('callViewMethod', { id: id, callId: callId, method: method, args: args })
   },
@@ -544,12 +576,15 @@ ipc.on('view-event', function (e, args) {
 })
 
 ipc.on('async-call-result', function (e, args) {
-  if (!webviews.asyncCallbacks[args.callId]) {
+  const record = webviews.asyncCallbacks[args.callId]
+  if (!record) {
     return
   }
 
-  webviews.asyncCallbacks[args.callId](args.error, args.result)
   delete webviews.asyncCallbacks[args.callId]
+  clearTimeout(record.timeoutId)
+
+  record.cb(args.error, args.result)
 })
 
 ipc.on('view-ipc', function (e, args) {
@@ -568,8 +603,32 @@ ipc.on('view-ipc', function (e, args) {
 })
 
 setInterval(function () {
-  captureCurrentTab()
-}, 15000)
+  const tabId = webviews.selectedId
+  if (!tabId) {
+    return
+  }
+
+  const tab = tabs.getRaw(tabId)
+  if (!tab || tab.private || tab.loaded === false) {
+    return
+  }
+
+  // Avoid doing capture work while the UI is backgrounded.
+  if (document.hidden || !document.body.classList.contains('focused')) {
+    return
+  }
+
+  // capturePage is non-critical; schedule it when the main thread is idle.
+  if (typeof requestIdleCallback === 'function') {
+    requestIdleCallback(function () {
+      captureCurrentTab({ tabId })
+    }, { timeout: 2500 })
+  } else {
+    setTimeout(function () {
+      captureCurrentTab({ tabId })
+    }, 0)
+  }
+}, 60000)
 
 ipc.on('captureData', function (e, data) {
   tabs.update(data.id, { previewImage: data.url })

@@ -1,6 +1,7 @@
 var pendingPermissions = []
 var grantedPermissions = []
 var nextPermissionId = 1
+const lifecycleHooksBoundContents = new WeakSet()
 
 /*
 All permission requests are given to the renderer on each change,
@@ -28,6 +29,27 @@ function removePermissionsForContents (contents) {
   grantedPermissions = grantedPermissions.filter(perm => perm.contents !== contents)
 
   sendPermissionsToRenderers()
+}
+
+function ensurePermissionLifecycleHooks (contents) {
+  if (lifecycleHooksBoundContents.has(contents)) {
+    return
+  }
+
+  lifecycleHooksBoundContents.add(contents)
+
+  contents.on('did-start-navigation', function (e, url, isInPlace, isMainFrame) {
+    if (isMainFrame && !isInPlace) {
+      removePermissionsForContents(contents)
+    }
+  })
+
+  contents.once('destroyed', function () {
+    // check whether the app is shutting down to avoid an electron crash (TODO remove this)
+    if (windows.getAll().length > 0) {
+      removePermissionsForContents(contents)
+    }
+  })
 }
 
 /*
@@ -117,6 +139,8 @@ function pagePermissionRequestHandler (webContents, permission, callback, detail
   Other permissions aren't supported for now to simplify the UI
   */
   if (['media', 'notifications', 'pointerLock'].includes(permission)) {
+    ensurePermissionLifecycleHooks(webContents)
+
     /*
     If permission was previously granted for this origin in a different tab, new requests should be allowed
     */
@@ -157,21 +181,6 @@ function pagePermissionRequestHandler (webContents, permission, callback, detail
       sendPermissionsToRenderers()
       nextPermissionId++
     }
-
-    /*
-    Once this view is closed or navigated to a new page, these permissions should be revoked
-    */
-    webContents.on('did-start-navigation', function (e, url, isInPlace, isMainFrame, frameProcessId, frameRoutingId) {
-      if (isMainFrame && !isInPlace) {
-        removePermissionsForContents(webContents)
-      }
-    })
-    webContents.once('destroyed', function () {
-      // check whether the app is shutting down to avoid an electron crash (TODO remove this)
-      if (windows.getAll().length > 0) {
-        removePermissionsForContents(webContents)
-      }
-    })
   } else {
     callback(false)
   }

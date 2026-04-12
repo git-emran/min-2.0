@@ -33,6 +33,7 @@ function addToHistoryCache (item) {
     tagIndex.addPage(item)
   }
   delete item.pageHTML
+  delete item.extractedText
   delete item.searchIndex
 
   item.searchTextCache = getSearchTextCache(item)
@@ -43,6 +44,7 @@ function addToHistoryCache (item) {
 
 function addOrUpdateHistoryCache (item) {
   delete item.pageHTML
+  delete item.extractedText
   delete item.searchIndex
 
   item.searchTextCache = getSearchTextCache(item)
