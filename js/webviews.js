@@ -602,33 +602,9 @@ ipc.on('view-ipc', function (e, args) {
   })
 })
 
-setInterval(function () {
-  const tabId = webviews.selectedId
-  if (!tabId) {
-    return
-  }
-
-  const tab = tabs.getRaw(tabId)
-  if (!tab || tab.private || tab.loaded === false) {
-    return
-  }
-
-  // Avoid doing capture work while the UI is backgrounded.
-  if (document.hidden || !document.body.classList.contains('focused')) {
-    return
-  }
-
-  // capturePage is non-critical; schedule it when the main thread is idle.
-  if (typeof requestIdleCallback === 'function') {
-    requestIdleCallback(function () {
-      captureCurrentTab({ tabId })
-    }, { timeout: 2500 })
-  } else {
-    setTimeout(function () {
-      captureCurrentTab({ tabId })
-    }, 0)
-  }
-}, 60000)
+// Note: preview captures are triggered on navigation completion (see onPageLoad).
+// Avoid periodic capturePage() polling here, since it can keep the GPU/CPU active
+// and increase power usage even when the user is idle.
 
 ipc.on('captureData', function (e, data) {
   tabs.update(data.id, { previewImage: data.url })

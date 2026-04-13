@@ -64,6 +64,8 @@
   "scripts": {
     "postinstall": "node ./scripts/setupDevEnv.js",
     "buildNative": "node ./scripts/buildNative.js",
+    "verifyNativeAbpCache": "node ./scripts/verifyNativeAbpCache.js",
+    "verifyNativeTrackingParams": "node ./scripts/verifyNativeTrackingParams.js",
     "test": "standard --verbose js/**/*.js main/*.js",
     "watch": "node ./scripts/watch.js",
     "startElectron": "electron . --development-mode",

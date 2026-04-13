@@ -218,6 +218,44 @@
 			<label for="checkbox-enable-autoplay" data-string="settingsAutoplayToggle"></label>
 		</div>
 
+      <div class="setting-section" id="tab-idling-section">
+        <input type="checkbox" id="checkbox-tab-idling" />
+        <label
+          for="checkbox-tab-idling"
+          data-string="settingsTabIdlingToggle"
+        ></label>
+        <div
+          class="settings-info-subheading setting-secondary-label"
+          data-string="settingsTabIdlingExplanation"
+          data-allowHTML
+        ></div>
+
+        <div class="setting-section" style="padding-left: 0; padding-right: 0; margin-top: 0.5em" id="tab-idling-options">
+          <label for="select-tab-idling-timeout" data-string="settingsTabIdlingTimeoutLabel"></label>
+          <select id="select-tab-idling-timeout">
+            <option value="5" data-string="settingsTabIdlingTimeout5m"></option>
+            <option value="15" data-string="settingsTabIdlingTimeout15m"></option>
+            <option value="30" data-string="settingsTabIdlingTimeout30m"></option>
+            <option value="60" data-string="settingsTabIdlingTimeout60m"></option>
+            <option value="120" data-string="settingsTabIdlingTimeout120m"></option>
+          </select>
+
+          <div style="margin-top: 0.75em">
+            <label for="input-tab-idling-exceptions" data-string="settingsTabIdlingExceptionsLabel"></label>
+            <textarea
+              id="input-tab-idling-exceptions"
+              class="setting-textarea"
+              rows="2"
+              style="width: 100%; max-width: 650px"
+            ></textarea>
+            <div
+              class="settings-info-subheading setting-secondary-label"
+              data-string="settingsTabIdlingExceptionsExplanation"
+            ></div>
+          </div>
+        </div>
+      </div>
+
       <div class="setting-section">
         <input type="checkbox" id="checkbox-update-notifications" />
         <label

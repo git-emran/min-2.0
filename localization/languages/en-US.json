@@ -172,6 +172,16 @@
     "settingsUserscriptShowDirectory": "Show script directory",
     "settingsUserAgentToggle": "Use a custom user agent",
     "settingsUpdateNotificationsToggle": "Automatically check for updates",
+    "settingsTabIdlingToggle": "Put inactive tabs to sleep",
+    "settingsTabIdlingExplanation": "To save power, Min can put inactive tabs to sleep. Sleeping tabs reload when you switch back to them.",
+    "settingsTabIdlingTimeoutLabel": "Sleep inactive tabs after",
+    "settingsTabIdlingTimeout5m": "5 minutes",
+    "settingsTabIdlingTimeout15m": "15 minutes",
+    "settingsTabIdlingTimeout30m": "30 minutes",
+    "settingsTabIdlingTimeout60m": "1 hour",
+    "settingsTabIdlingTimeout120m": "2 hours",
+    "settingsTabIdlingExceptionsLabel": "Never sleep these sites",
+    "settingsTabIdlingExceptionsExplanation": "Comma-separated domains (example: mail.google.com, docs.google.com).",
     "settingsUsageStatisticsToggle": {
       "unsafeHTML": "Send usage statistics (<a href=\"https://github.com/minbrowser/min/blob/master/docs/statistics.md\">More info</a>)"
     },

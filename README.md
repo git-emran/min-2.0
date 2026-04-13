@@ -57,6 +57,28 @@ If you want to develop Min:
 - Start Min in development mode by running `npm run start`.
 - After you make changes, press `alt+ctrl+r` (or `opt+cmd+r` on Mac) to reload the browser UI.
 
+### Native addons (optional)
+
+Min includes a small set of optional native (C++) addons used to keep the UI responsive on CPU-heavy paths (for example, ranking and fuzzy matching during search).
+
+- Build native addons (if you have a working C++ toolchain for your platform): `npm run buildNative`
+- The app will automatically fall back to the JavaScript implementations if the native addons are not present.
+
+To verify the native `quick_score` addon matches the JavaScript scorer:
+
+- `node scripts/verifyNativeQuickScore.js`
+
+### Performance migration (context + what's next)
+
+Recent updates added **incremental** performance scaffolding (native addons are optional, and the app keeps JS fallbacks):
+
+- `tracking_params.node`: a conservative fast-path that avoids `new URL()` parsing when a request URL clearly has no removable tracking parameters.
+- `abp_match_cache.node`: an optional native LRU cache for Adblock Plus match results to reduce repeated `parser.matches(...)` work.
+
+Next recommended target (still incremental, still with JS as the source of truth):
+
+- Add a native **fast-reject** layer for ABP matching (native can safely say “definitely not blocked”, otherwise fall back to the current JS engine). See `docs/perf-cpp-migration.md` for the tracked plan.
+
 ### Building binaries
 
 In order to build Min from source, follow the installation instructions above, then use one of the following commands to create binaries:

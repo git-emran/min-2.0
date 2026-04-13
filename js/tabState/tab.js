@@ -271,6 +271,6 @@ class TabList {
   }
 }
 
-TabList.temporaryProperties = ['canGoBack', 'canGoForward', 'navigationStateInitialized', 'hasAudio', 'previewImage', 'loaded', 'hasWebContents']
+TabList.temporaryProperties = ['canGoBack', 'canGoForward', 'navigationStateInitialized', 'hasAudio', 'previewImage', 'loaded', 'hasWebContents', 'discarded']
 
 module.exports = TabList

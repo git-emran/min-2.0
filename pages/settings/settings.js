@@ -11,6 +11,10 @@ var openTabsInForegroundCheckbox = document.getElementById('checkbox-open-tabs-i
 var autoPlayCheckbox = document.getElementById('checkbox-enable-autoplay')
 var userAgentCheckbox = document.getElementById('checkbox-user-agent')
 var userAgentInput = document.getElementById('input-user-agent')
+var tabIdlingCheckbox = document.getElementById('checkbox-tab-idling')
+var tabIdlingOptions = document.getElementById('tab-idling-options')
+var tabIdlingTimeoutSelect = document.getElementById('select-tab-idling-timeout')
+var tabIdlingExceptionsInput = document.getElementById('input-tab-idling-exceptions')
 
 function showRestartRequiredBanner () {
   banner.hidden = false
@@ -336,6 +340,53 @@ settings.get('enableAutoplay', function (value) {
 
 autoPlayCheckbox.addEventListener('change', function (e) {
   settings.set('enableAutoplay', this.checked)
+})
+
+/* tab idling (sleeping tabs) */
+
+function updateTabIdlingOptionsVisibility (enabled) {
+  tabIdlingOptions.hidden = !enabled
+}
+
+function setTabIdlingExceptionsInputSize () {
+  tabIdlingExceptionsInput.style.height = 'auto'
+  tabIdlingExceptionsInput.style.height = (tabIdlingExceptionsInput.scrollHeight + 2) + 'px'
+}
+
+settings.get('tabIdlingEnabled', function (value) {
+  const enabled = (value === undefined) ? true : Boolean(value)
+  tabIdlingCheckbox.checked = enabled
+  updateTabIdlingOptionsVisibility(enabled)
+})
+
+tabIdlingCheckbox.addEventListener('change', function () {
+  settings.set('tabIdlingEnabled', this.checked)
+  updateTabIdlingOptionsVisibility(this.checked)
+})
+
+settings.get('tabIdlingTimeoutMinutes', function (value = 30) {
+  tabIdlingTimeoutSelect.value = String(value)
+})
+
+tabIdlingTimeoutSelect.addEventListener('change', function () {
+  settings.set('tabIdlingTimeoutMinutes', parseInt(this.value))
+})
+
+settings.get('tabIdlingExceptions', function (value) {
+  const domains = Array.isArray(value) ? value : []
+  tabIdlingExceptionsInput.value = domains.join(', ')
+  setTabIdlingExceptionsInputSize()
+})
+
+tabIdlingExceptionsInput.addEventListener('input', function () {
+  setTabIdlingExceptionsInputSize()
+
+  const newValue = this.value
+    .split(',')
+    .map(i => i.trim().toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, ''))
+    .filter(Boolean)
+
+  settings.set('tabIdlingExceptions', newValue)
 })
 
 /* user agent settting */

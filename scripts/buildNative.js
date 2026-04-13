@@ -21,6 +21,14 @@ const targets = [
   {
     sourceFile: path.join(nativeDir, 'quick_score.cc'),
     outFile: path.join(buildDir, 'quick_score.node')
+  },
+  {
+    sourceFile: path.join(nativeDir, 'tracking_params.cc'),
+    outFile: path.join(buildDir, 'tracking_params.node')
+  },
+  {
+    sourceFile: path.join(nativeDir, 'abp_match_cache.cc'),
+    outFile: path.join(buildDir, 'abp_match_cache.node')
   }
 ]
 

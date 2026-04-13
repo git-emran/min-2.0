@@ -66,6 +66,10 @@ html {
 .setting-section label + select {
   margin-left: 0.66em;
 }
+.setting-textarea {
+  vertical-align: text-bottom;
+  resize: vertical;
+}
 .setting-secondary-label {
   padding-left: 1.18em;
   padding-top: 0.2em;
