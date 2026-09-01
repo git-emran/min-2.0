@@ -20,6 +20,7 @@ function setSearchSuggestionCache (key, value) {
 ipc.handle('fetchSearchSuggestions', async function (e, args) {
   try {
     const engine = args && args.engine
+    const suggestionsURL = args && args.suggestionsURL
     let query = args && args.query
 
     if (typeof query !== 'string') {
@@ -37,7 +38,9 @@ ipc.handle('fetchSearchSuggestions', async function (e, args) {
     }
 
     let url
-    if (engine === 'DuckDuckGo') {
+    if (suggestionsURL) {
+      url = suggestionsURL.replace('%s', encodeURIComponent(query))
+    } else if (engine === 'DuckDuckGo') {
       url = 'https://ac.duckduckgo.com/ac/?q=' + encodeURIComponent(query) + '&type=list&t=min'
     } else if (engine === 'Google') {
       url = 'https://suggestqueries.google.com/complete/search?client=firefox&q=' + encodeURIComponent(query)
@@ -45,7 +48,7 @@ ipc.handle('fetchSearchSuggestions', async function (e, args) {
       return []
     }
 
-    const cacheKey = engine + ':' + query.toLowerCase()
+    const cacheKey = (engine || 'url') + ':' + query.toLowerCase()
     const cached = searchSuggestionCache.get(cacheKey)
     if (cached && (Date.now() - cached.time) < 60000) {
       return cached.value
@@ -62,16 +65,18 @@ ipc.handle('fetchSearchSuggestions', async function (e, args) {
     const json = await res.json()
     let suggestions = []
 
-    if (engine === 'Google') {
-      if (Array.isArray(json) && Array.isArray(json[1])) {
+    if (Array.isArray(json)) {
+      if (Array.isArray(json[1])) {
+        // Standard OpenSearch format: [query, [suggestion1, suggestion2, ...]]
         suggestions = json[1]
-      }
-    } else {
-      if (Array.isArray(json)) {
+      } else {
+        // Array of string results or array of objects ({phrase: ...} or {text: ...})
         suggestions = json
-          .map(r => (r && typeof r === 'object') ? (r.phrase || r.text || r.value) : null)
+          .map(r => (typeof r === 'string' ? r : (r && typeof r === 'object') ? (r.phrase || r.text || r.value) : null))
           .filter(Boolean)
       }
+    } else if (json && typeof json === 'object' && Array.isArray(json.results)) {
+      suggestions = json.results.map(r => (typeof r === 'string' ? r : (r && (r.phrase || r.text || r.value)))).filter(Boolean)
     }
 
     suggestions = suggestions

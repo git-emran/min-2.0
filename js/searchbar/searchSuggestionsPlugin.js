@@ -6,9 +6,15 @@ const { ipcRenderer } = require('electron')
 
 function showSearchSuggestions (text, input, inputFlags) {
   const engine = searchEngine.getCurrent()
+  const suggestionsURL = engine.suggestionsURL
+
+  if (!suggestionsURL && engine.name !== 'DuckDuckGo' && engine.name !== 'Google') {
+    searchbarPlugins.reset('searchSuggestions')
+    return
+  }
 
   // Don't add network results if the list is already crowded.
-  if ((searchbarPlugins.getResultCount() - searchbarPlugins.getResultCount('searchSuggestions')) > 12) {
+  if ((searchbarPlugins.getResultCount() - searchbarPlugins.getResultCount('searchSuggestions')) > 3) {
     searchbarPlugins.reset('searchSuggestions')
     return
   }
@@ -16,7 +22,7 @@ function showSearchSuggestions (text, input, inputFlags) {
   const requestSent = Date.now()
   showSearchSuggestions.lastRequestSent = requestSent
 
-  ipcRenderer.invoke('fetchSearchSuggestions', { engine: engine.name, query: text })
+  ipcRenderer.invoke('fetchSearchSuggestions', { engine: engine.name, suggestionsURL: suggestionsURL, query: text })
     .then(function (suggestions) {
       if (requestSent < showSearchSuggestions.lastRequestSent) {
         return
@@ -24,7 +30,7 @@ function showSearchSuggestions (text, input, inputFlags) {
 
       searchbarPlugins.reset('searchSuggestions')
 
-      if (searchbarPlugins.getResultCount() > 12) {
+      if (searchbarPlugins.getResultCount() > 3) {
         return
       }
 
@@ -32,7 +38,7 @@ function showSearchSuggestions (text, input, inputFlags) {
         return
       }
 
-      suggestions.slice(0, 6).forEach(function (suggestion) {
+      suggestions.slice(0, 3).forEach(function (suggestion) {
         var data = {
           title: suggestion,
           url: suggestion
