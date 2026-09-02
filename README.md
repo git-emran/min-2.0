@@ -72,8 +72,13 @@ To verify the native `quick_score` addon matches the JavaScript scorer:
 
 Recent updates added **incremental** performance scaffolding (native addons are optional, and the app keeps JS fallbacks):
 
-- `tracking_params.node`: a conservative fast-path that avoids `new URL()` parsing when a request URL clearly has no removable tracking parameters.
-- `abp_match_cache.node`: an optional native LRU cache for Adblock Plus match results to reduce repeated `parser.matches(...)` work.
+- `tracking_params.node`: a conservative fast-path that avoids `new URL()` parsing when a request URL clearly has no removable tracking parameters. Runs in the **Main Process** (`main/filtering.js`) during `ses.webRequest.onBeforeRequest` interception before web content is processed.
+- `abp_match_cache.node`: an optional native LRU cache for Adblock Plus match results to reduce repeated `parser.matches(...)` work. Runs in the **Main Process** (`main/filtering.js`) during web request network filtering.
+
+#### Security, Process Boundaries & IPC Cost
+- **Main Process Addons** (`tracking_params.node`, `abp_match_cache.node`): Run in-process exclusively within Electron's Node.js main process in `main/filtering.js` (`ses.webRequest.onBeforeRequest`). Because they execute directly inside the main thread's network interception loop, there is **zero IPC round-trip/marshaling overhead**, ensuring the performance speedup from avoiding `new URL()` and JS string allocations is fully retained end-to-end. They operate prior to page rendering without touching untrusted renderer sandboxes.
+- **UI / Internal Addons** (`quick_score.node`, `history_score.node`, `places_tokenizer.node`, `tag_ranker.node`): Run in-process in Min's internal browser UI renderer process (the top-level tab/searchbar chrome context). They process user UI search queries and local browser history in-place with zero IPC, completely isolated from untrusted third-party web content loaded inside webview containers.
+- **Memory Safety & Fuzzing (ASan / UBSan / libFuzzer)**: Because URL string inputs originate from untrusted web navigation, native C++ string parsing functions (e.g. in `tracking_params.cc`) are audited using AddressSanitizer (`-fsanitize=address`) and UndefinedBehaviorSanitizer (`-fsanitize=undefined`), and subjected to `libFuzzer` / `AFL++` fuzzing to guarantee protection against buffer overflows and memory corruption. (See [`SECURITY.md`](file:///Users/emranhossain/Programming/min-2.0/SECURITY.md)).
 
 Next recommended target (still incremental, still with JS as the source of truth):
 

@@ -18,6 +18,10 @@ function showRestoreTask () {
   var lastTask = tasks.slice().sort((a, b) => {
     return tasks.getLastActivity(b.id) - tasks.getLastActivity(a.id)
   })[1]
+
+  if (!lastTask) {
+    return
+  }
   var recentTabs = lastTask.tabs.get().sort((a, b) => b.lastActivity - a.lastActivity).slice(0, 3)
 
   var taskDescription
@@ -45,7 +49,8 @@ function initialize () {
   searchbarPlugins.register('restoreTask', {
     index: 0,
     trigger: function (text) {
-      return !text && performance.now() < 15000 && tasks.getSelected().tabs.isEmpty() && window.createdNewTaskOnStartup
+      const hasOtherTasks = tasks.slice().length > 1
+      return !text && tasks.getSelected().tabs.isEmpty() && hasOtherTasks
     },
     showResults: showRestoreTask
   })

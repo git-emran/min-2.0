@@ -176,6 +176,7 @@
     "settingsTabIdlingExplanation": "To save power, Min can put inactive tabs to sleep. Sleeping tabs reload when you switch back to them.",
     "settingsTabIdlingTimeoutLabel": "Sleep inactive tabs after",
     "settingsTabIdlingTimeout5m": "5 minutes",
+    "settingsTabIdlingTimeout10m": "10 minutes",
     "settingsTabIdlingTimeout15m": "15 minutes",
     "settingsTabIdlingTimeout30m": "30 minutes",
     "settingsTabIdlingTimeout60m": "1 hour",
